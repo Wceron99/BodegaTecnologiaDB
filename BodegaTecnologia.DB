@@ -1,0 +1,120 @@
+CREATE DATABASE IF NOT EXISTS BodegaTecnologiaDB;
+USE BodegaTecnologiaDB;
+
+-- 1. SEGURIDAD Y ROLES (RNF-02)
+CREATE TABLE Roles (
+    id_rol INT PRIMARY KEY AUTO_INCREMENT,
+    nombre_rol VARCHAR(20) NOT NULL
+);
+
+CREATE TABLE Usuarios (
+    id_usuario INT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    id_rol INT,
+    FOREIGN KEY (id_rol) REFERENCES Roles(id_rol)
+);
+
+-- 2. INFRAESTRUCTURA Y TERCEROS (RF-04, RF-05, RF-08)
+CREATE TABLE Bodegas (
+    id_bodega INT PRIMARY KEY AUTO_INCREMENT,
+    nombre_bodega VARCHAR(50) NOT NULL,
+    ubicacion_detallada VARCHAR(100) NOT NULL 
+);
+
+CREATE TABLE Proveedores (
+    id_proveedor INT PRIMARY KEY AUTO_INCREMENT,
+    nombre_empresa VARCHAR(100) NOT NULL,
+    nit VARCHAR(20) UNIQUE,
+    contacto VARCHAR(50),
+    telefono VARCHAR(20)
+);
+
+CREATE TABLE Clientes (
+    id_cliente INT PRIMARY KEY AUTO_INCREMENT,
+    nombre_completo VARCHAR(100) NOT NULL,
+    documento_id VARCHAR(20) UNIQUE,
+    tipo_cliente ENUM('Franquicia', 'Unitario', 'Mayorista') DEFAULT 'Unitario'
+);
+
+-- 3. INVENTARIO (RF-01, RF-02)
+CREATE TABLE Productos (
+    id_producto INT PRIMARY KEY AUTO_INCREMENT,
+    nombre VARCHAR(100) NOT NULL,
+    marca VARCHAR(50),
+    serie_unica VARCHAR(100) UNIQUE, -- RF-02: trazabilidad por serie única
+    precio_unitario DECIMAL(12,2) NOT NULL,
+    stock INT DEFAULT 0,
+    id_proveedor INT,
+    id_bodega INT,
+    FOREIGN KEY (id_proveedor) REFERENCES Proveedores(id_proveedor),
+    FOREIGN KEY (id_bodega) REFERENCES Bodegas(id_bodega)
+);
+
+-- 4. VENTAS Y FACTURACIÓN (RF-11, RF-12)
+CREATE TABLE Ventas (
+    id_venta INT PRIMARY KEY AUTO_INCREMENT,
+    id_cliente INT,
+    id_vendedor INT,
+    fecha_emision TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    total_factura DECIMAL(15,2),
+    FOREIGN KEY (id_cliente) REFERENCES Clientes(id_cliente),
+    FOREIGN KEY (id_vendedor) REFERENCES Usuarios(id_usuario)
+);
+
+CREATE TABLE Detalle_Ventas (
+    id_detalle INT PRIMARY KEY AUTO_INCREMENT,
+    id_venta INT,
+    id_producto INT,
+    cantidad INT NOT NULL,
+    precio_venta_historico DECIMAL(12,2),
+    FOREIGN KEY (id_venta) REFERENCES Ventas(id_venta),
+    FOREIGN KEY (id_producto) REFERENCES Productos(id_producto)
+);
+
+-- 5. AUDITORÍA (RNF-04)
+CREATE TABLE Auditoria_Logs (
+    id_log INT PRIMARY KEY AUTO_INCREMENT,
+    usuario_db VARCHAR(50), -- Registra el usuario de la DB que hizo el cambio
+    accion_tipo ENUM('LOGIN', 'CREAR', 'EDITAR', 'ELIMINAR'),
+    descripcion TEXT,
+    fecha_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- USUARIOS DEL SERVIDOR Y PERMISOS
+-- Admin: Acceso total
+CREATE USER 'admin_tech'@'localhost' IDENTIFIED BY 'Admin12345*';
+GRANT ALL PRIVILEGES ON BodegaTecnologiaDB.* TO 'admin_tech'@'localhost';
+
+-- Vendedor: Solo operaciones comerciales (RF-11, RF-12)
+CREATE USER 'vendedor_tech'@'localhost' IDENTIFIED BY 'Vende2026*';
+GRANT SELECT ON BodegaTecnologiaDB.Productos TO 'vendedor_tech'@'localhost';
+GRANT SELECT, INSERT, UPDATE ON BodegaTecnologiaDB.Clientes TO 'vendedor_tech'@'localhost';
+GRANT INSERT ON BodegaTecnologiaDB.Ventas TO 'vendedor_tech'@'localhost';
+GRANT INSERT ON BodegaTecnologiaDB.Detalle_Ventas TO 'vendedor_tech'@'localhost';
+
+-- Cliente: Solo consulta de catálogo
+CREATE USER 'cliente_tech'@'localhost' IDENTIFIED BY 'Cliente2026*';
+-- CORRECCIÓN: Se cambió 'precio' por 'precio_unitario'
+GRANT SELECT (nombre, marca, precio_unitario, stock) ON BodegaTecnologiaDB.Productos TO 'cliente_tech'@'localhost';
+
+FLUSH PRIVILEGES;
+
+-- TRIGGER DE AUDITORÍA OPTIMIZADO
+DELIMITER //
+CREATE TRIGGER tr_log_inventario
+AFTER UPDATE ON Productos
+FOR EACH ROW
+BEGIN
+    -- Solo registra si hubo cambios reales en stock o precio
+    IF OLD.stock <> NEW.stock OR OLD.precio_unitario <> NEW.precio_unitario THEN
+        INSERT INTO Auditoria_Logs (usuario_db, accion_tipo, descripcion)
+        VALUES (
+            USER(), -- Captura el usuario actual de la conexión
+            'EDITAR',
+            CONCAT('Producto: ', OLD.nombre, ' | Stock: ', OLD.stock, '->', NEW.stock, 
+                   ' | Precio: ', OLD.precio_unitario, '->', NEW.precio_unitario)
+        );
+    END IF;
+END //
+DELIMITER ;
