@@ -1,0 +1,11 @@
+{% extends "layout.html" %}
+{% block contenido %}
+<h2>Editar empleado</h2>
+<form action="/actualizar" method="POST">
+<input type="hidden" name="id" value="{{empleado[0]}}">
+<input type="text" name="nombre" value="{{empleado[1]}}">
+<input type="text" name="cargo" value="{{empleado[2]}}">
+<input type="number" name="salario" value="{{empleado[3]}}">
+<button type="submit">Actualizar</button>
+</form>
+{% endblock %}

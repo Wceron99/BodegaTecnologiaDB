@@ -1,0 +1,26 @@
+{% extends "layout.html" %}
+{% block contenido %}
+<a href="/agregar">Agregar empleado</a>
+<h2>Lista de empleados</h2>
+<table border="1">
+<tr>
+<th>ID</th>
+<th>Nombre</th>
+<th>Cargo</th>
+<th>Salario</th>
+<th>Acciones</th>
+</tr>
+{% for e in empleados %}
+<tr>
+<td>{{e[0]}}</td>
+<td>{{e[1]}}</td>
+<td>{{e[2]}}</td>
+<td>{{e[3]}}</td>
+<td>
+<a href="/editar/{{e[0]}}">Editar</a>
+<a href="/eliminar/{{e[0]}}">Eliminar</a>
+</td>
+</tr>
+{% endfor %}
+</table>
+{% endblock %}
